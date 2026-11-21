@@ -1,0 +1,525 @@
+<!doctype html>
+<meta charset="utf-8" />
+<style>
+  /* Captions and notes use the system font. For the product's own, add an @font-face named "Caption". */
+  html, body { margin: 0; width: 100%; height: 100%; background: #f3f4f5; overflow: hidden; }
+  #device { position: absolute; top: 50%; }
+  #hardware { position: absolute; inset: 0; overflow: visible; filter: drop-shadow(0 30px 40px rgb(0 0 0 / 0.16)); }
+  #screen { position: absolute; overflow: hidden; background: #000; }
+  #frame { position: absolute; left: 0; top: 0; display: block; width: 100%; height: 100%; }
+  #island { position: absolute; background: #000; border-radius: 999px; display: none; }
+  #cursor { position: absolute; left: 0; top: 0; display: none; will-change: transform; }
+  #cursor img { position: absolute; max-width: none; display: none; }
+  #cursor img.hand { filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.45)); }
+  #chrome { position: absolute; inset: 0; pointer-events: none; }
+  #touch {
+    position: absolute; left: 0; top: 0; border-radius: 50%;
+    background: rgb(70 70 70 / 0.42); box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.55);
+    will-change: transform, opacity;
+  }
+  .note { position: absolute; height: 0; border-top: 1.5px solid #1d1d1f; will-change: opacity, transform; }
+  .note span { position: absolute; bottom: 12px; font: 38px/1 "Caption", system-ui; color: #1d1d1f; letter-spacing: -0.01em; white-space: nowrap; }
+  .note.left span { left: 4px; }
+  .note.right span { right: 4px; }
+  #captions { position: absolute; left: 0; right: 0; bottom: 66px; height: 72px; }
+  .phrase {
+    position: absolute; left: 50%; top: 0; height: 72px; border-radius: 18px; overflow: hidden;
+    background: rgb(22 22 24 / 0.82); will-change: width, opacity, transform;
+  }
+  .phrase div { position: absolute; left: 26px; top: 0; white-space: nowrap; font: 38px/72px "Caption", system-ui; color: #fff; letter-spacing: -0.01em; }
+  .phrase span { display: inline-block; white-space: pre; will-change: opacity; }
+</style>
+<div id="device">
+  <svg id="hardware" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="chrome"></div>
+  <div id="screen"><img id="frame" /><div id="island"></div><div id="touch"></div><div id="cursor"><img class="arrow" src="cursors/arrow.png" onerror="this.remove()" /><img class="hand" src="cursors/hand.png" onerror="this.remove()" /></div></div>
+</div>
+<div id="notes"></div>
+<div id="captions"></div>
+<script>
+  // Rendered at 1920×1080 by scripts/render.cjs. Everything per video lives in narration.json:
+  //   clip      folder written by sim-frames.cjs (simulator) or web-record.cjs (web page, Electron app)
+  //   frame     "iphone" (default); "safari" or "chrome" (a browser window showing the page's own title,
+  //             address and favicon); "window" (a macOS app window with a title bar; set "windowTitle");
+  //             "macbook" (the page fills a MacBook's screen under the notch)
+  //   touches   [{ ms, x, y }] as sent to the simulator (a swipe adds x2, y2, dur). Leave it out for a
+  //             web-record.cjs clip: its clicks are used, and its pointer track draws a real cursor.
+  //   chapters  [{ title, text, from, speechAt, notes }]
+  //             at        seconds into the recording at which the chapter's footage starts, for a chapter
+  //                       that opens on a scroll or on the first frame; use it in place of `from`.
+  //             from      index of the chapter's first touch. Its footage runs from LEAD_IN before
+  //                       that touch to the next chapter's start. Without it the chapter holds the last frame.
+  //             speechAt  seconds into the chapter at which the voice starts (default SPEECH_AT), so a
+  //                       sentence lands on the moment it describes.
+  //             maxIdle   overrides MAX_IDLE for this chapter. Set it above 1 while a clock or progress
+  //                       bar is ticking once a second, so playback time is not sped up.
+  //             notes     [{ label, side: "left" | "right", y, at, until }]  a hairline from the phone's
+  //                       edge at y (0–1 of the screen) with a label on it, shown from `at` to `until`
+  //                       seconds into the chapter (default: 0.6s in, to the chapter's end).
+  // Chapter titles are not drawn: narrate.cjs writes them beside the video for the page that plays it.
+  const MAX_IDLE = 0.7;           // a still screen is shown for at most this long
+  const LEAD_IN = 0.45;           // footage before a chapter's first touch
+  const SPEECH_AT = 0.2;
+  const BREATH = 0.45;            // pause after the speech before the next chapter
+  const PHRASE_WORDS = 5;         // a caption phrase ends at punctuation or after this many words
+
+  // Hardware in millimetres, from the device-frames skill (ibelick/ui-skills). iPhone 18 Pro.
+  const DEVICE = {
+    points: 402,
+    caseMm: [71.85, 150.01],
+    displayMm: [66.57, 144.73],
+    corner: [[19.43, 0], [13.9, 0.04], [8.46, 0.92], [3.8, 3.8]],
+    left: [[34.28, 6.9], [48.43, 11.2], [62.63, 11.2]],
+    right: [[55.53, 17.7]],
+    protrusion: 0.45,
+    rimMm: 0.95,
+    island: [15.66, 6.07], islandY: 7.99, // Dynamic Island size and centre from the case top
+  };
+  const SAFE_TOP = 59;                    // points a web page starts below the top of an iPhone screen
+  const DEVICE_H = 980, DEVICE_X = 960;   // CSS px: device height, and its centre from the left
+  // MacBook Pro 14-inch front view in screen points, from the device-frames skill: an approximation.
+  const MACBOOK = { screen: [1512, 982], bezel: [16, 16, 22], edge: 4, corner: 24, notch: [196, 32], overhang: 50, base: 38 };
+  const MACBOOK_H = 890, MACBOOK_Y = 520; // CSS px: laptop height, and its centre from the top
+  const WINDOW_FIT = [1560, 800], WINDOW_BAR = 44, WINDOW_Y = 500;
+  const CURSOR_SCALE = 1.3;               // the cursor is drawn larger than life so it reads at video size
+  const LEAD_IN_CURSOR = 0.95;            // a click is preceded by the cursor's glide, so the chapter starts earlier
+  const NOTE_GAP = 18, NOTE_LENGTH = 560; // a note's line starts this far from the phone and runs this long
+  const DOT_R = 16;
+  const HOLD = 0.1, FADE = 0.28;
+  // Touch dot travel: glide between touches up to REST_MAX apart, else linger, fade and reappear.
+  const REST_MAX = 2.4, GLIDE = 0.55, ARRIVE = 0.1, APPEAR = 0.4, LINGER = 0.5;
+
+  const $ = (id) => document.getElementById(id);
+  const device = $("device"), hardware = $("hardware"), screen = $("screen"), img = $("frame"), touch = $("touch");
+  const cursor = $("cursor"), chrome = $("chrome");
+  let clip, chapters, moves, scale, shown = -1, geometry, meta, area;
+
+  const clamp = (v) => Math.max(0, Math.min(1, v));
+  const easeOut = (u) => 1 - (1 - u) ** 3;
+  const easeInOut = (u) => (u < 0.5 ? 4 * u ** 3 : 1 - (-2 * u + 2) ** 3 / 2);
+
+  function outline(w, h, f, ox, oy) {
+    const half = DEVICE.corner.map(([x, y]) => [x * f, y * f]);
+    const c = [...half, ...half.slice(0, -1).reverse().map(([x, y]) => [y, x])];
+    const p = [
+      ...c.slice().reverse(),
+      ...c.map(([x, y]) => [w - x, y]),
+      ...c.slice().reverse().map(([x, y]) => [w - x, h - y]),
+      ...c.map(([x, y]) => [x, h - y]),
+    ].map(([x, y]) => [x + ox, y + oy]);
+    const n = p.length;
+    let d = `M${p[0][0]} ${p[0][1]}`;
+    for (let i = 0; i < n; i++) {
+      const a = p[(i + n - 1) % n], b = p[i], e = p[(i + 1) % n], g = p[(i + 2) % n];
+      d += `C${b[0] + (e[0] - a[0]) / 6} ${b[1] + (e[1] - a[1]) / 6} ${e[0] - (g[0] - b[0]) / 6} ${e[1] - (g[1] - b[1]) / 6} ${e[0]} ${e[1]}`;
+    }
+    return d + "Z";
+  }
+
+  // The page fills the MacBook's screen below the notch strip, the way a full-screen app does.
+  function drawMacbook(m) {
+    const M = MACBOOK, [sw, sh] = M.screen, [bs, bt, bb] = M.bezel;
+    const lidW = sw + 2 * (bs + M.edge), lidH = sh + bt + bb + 2 * M.edge, totalW = lidW + 2 * M.overhang, totalH = lidH + M.base;
+    const k = MACBOOK_H / totalH, W = totalW * k, H = MACBOOK_H;
+    const fit = Math.min(sw / m.width, sh / m.height), cw = m.width * fit, chh = m.height * fit;
+    const sx = (M.overhang + M.edge + bs) * k, sy = (M.edge + bt) * k;
+    scale = fit * k;
+    const top = MACBOOK_Y - H / 2;
+    geometry = { left: DEVICE_X - W / 2 + M.overhang * k, right: DEVICE_X + W / 2 - M.overhang * k, screenTop: top + sy + (sh - chh) * k, screenHeight: chh * k };
+    Object.assign(device.style, { width: W + "px", height: H + "px", left: DEVICE_X - W / 2 + "px", top: top + "px", marginTop: 0 });
+    Object.assign(screen.style, { left: sx + (sw - cw) / 2 * k + "px", top: sy + (sh - chh) * k + "px", width: cw * k + "px", height: chh * k + "px", background: "#fff" });
+    area = { x: 0, y: 0, w: cw * k, h: chh * k };
+    const lx = M.overhang * k, r = (M.corner + M.edge) * k, [nw, nh] = M.notch;
+    hardware.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    hardware.innerHTML = `
+      <defs>
+        <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3b3f"/><stop offset="1" stop-color="#232427"/></linearGradient>
+        <linearGradient id="base" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4b50"/><stop offset="0.35" stop-color="#2c2d31"/><stop offset="1" stop-color="#18191b"/></linearGradient>
+      </defs>
+      <rect x="${lx}" y="0" width="${lidW * k}" height="${lidH * k}" rx="${r}" fill="url(#lid)"/>
+      <rect x="${lx + M.edge * k}" y="${M.edge * k}" width="${(lidW - 2 * M.edge) * k}" height="${(lidH - 2 * M.edge) * k}" rx="${M.corner * k}" fill="#050506"/>
+      <rect x="${sx}" y="${sy}" width="${sw * k}" height="${sh * k}" rx="${10 * k}" fill="#000"/>
+      <path d="M${W / 2 - nw / 2 * k} ${sy - 1} h${nw * k} v${(nh - 9) * k} a${9 * k} ${9 * k} 0 0 1 ${-9 * k} ${9 * k} h${-(nw - 18) * k} a${9 * k} ${9 * k} 0 0 1 ${-9 * k} ${-9 * k} z" fill="#050506"/>
+      <path d="M0 ${lidH * k} h${W} v${(M.base - 22) * k} a${22 * k} ${22 * k} 0 0 1 ${-22 * k} ${22 * k} h${-(totalW - 44) * k} a${22 * k} ${22 * k} 0 0 1 ${-22 * k} ${-22 * k} z" fill="url(#base)"/>
+      <path d="M${W / 2 - 115 * k} ${lidH * k} h${230 * k} v${3 * k} a${9 * k} ${9 * k} 0 0 1 ${-9 * k} ${9 * k} h${-212 * k} a${9 * k} ${9 * k} 0 0 1 ${-9 * k} ${-9 * k} z" fill="#6a6b70"/>`;
+  }
+
+  // A macOS window: title bar with the three window buttons, then the page. The bar is drawn here,
+  // not recorded, so it is an approximation of the app's real title bar.
+  function drawWindow(m, title) {
+    const fit = Math.min(WINDOW_FIT[0] / m.width, (WINDOW_FIT[1] - WINDOW_BAR) / m.height, 1.25), W = m.width * fit, bar = WINDOW_BAR * Math.min(fit, 1), H = m.height * fit + bar;
+    scale = fit;
+    const top = WINDOW_Y - H / 2;
+    geometry = { left: DEVICE_X - W / 2, right: DEVICE_X + W / 2, screenTop: top + bar, screenHeight: m.height * fit };
+    Object.assign(device.style, { width: W + "px", height: H + "px", left: DEVICE_X - W / 2 + "px", top: top + "px", marginTop: 0, borderRadius: "12px", background: "#fff", boxShadow: "0 0 0 1px rgb(0 0 0 / 0.1), 0 36px 70px -18px rgb(0 0 0 / 0.3), 0 10px 24px rgb(0 0 0 / 0.08)" });
+    Object.assign(screen.style, { left: 0, top: bar + "px", width: W + "px", height: m.height * fit + "px", background: "#fff", borderRadius: "0 0 12px 12px" });
+    area = { x: 0, y: 0, w: W, h: m.height * fit };
+    hardware.style.display = "none";
+    const dot = (x, color) => `<span style="position:absolute;left:${x}px;top:${bar / 2 - 6}px;width:12px;height:12px;border-radius:50%;background:${color};box-shadow:inset 0 0 0 0.5px rgb(0 0 0 / 0.12)"></span>`;
+    chrome.innerHTML = `<div style="position:absolute;left:0;top:0;right:0;height:${bar}px;border-radius:12px 12px 0 0;background:#f4f4f5;box-shadow:inset 0 -1px 0 rgb(0 0 0 / 0.09)">
+      ${dot(18, "#ff5f57")}${dot(38, "#febc2e")}${dot(58, "#28c840")}
+      <span style="position:absolute;left:90px;right:90px;top:0;line-height:${bar}px;text-align:center;font:500 13px/${bar}px system-ui;color:#4b4b4f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span></div>`;
+    chrome.querySelector("div > span:last-child").textContent = title ?? "";
+  }
+
+  // Browser windows. Both are drawn here from the page's captured title, address and favicon;
+  // they follow the shape of Safari and Chrome on macOS without their logos.
+  const ICON = {
+    sidebar: '<rect x="1.75" y="3.25" width="14.5" height="11.5" rx="2.5"/><path d="M6.5 3.5v11"/>',
+    back: '<path d="M10.75 3.75 5.5 9l5.25 5.25"/>',
+    forward: '<path d="M7.25 3.75 12.5 9l-5.25 5.25"/>',
+    reload: '<path d="M14.5 9a5.5 5.5 0 1 1-1.61-3.89"/><path d="M14.75 2.75v3.5h-3.5"/>',
+    share: '<path d="M9 11V2.25"/><path d="M5.75 5.25 9 2l3.25 3.25"/><path d="M5.5 8H4.25A1.75 1.75 0 0 0 2.5 9.75v4.5A1.75 1.75 0 0 0 4.25 16h9.5a1.75 1.75 0 0 0 1.75-1.75v-4.5A1.75 1.75 0 0 0 13.75 8H12.5"/>',
+    plus: '<path d="M9 3.25v11.5M3.25 9h11.5"/>',
+    tabs: '<rect x="2.25" y="5.25" width="10.5" height="10.5" rx="2.25"/><path d="M5.5 5V4.5A2.25 2.25 0 0 1 7.75 2.25h5.75a2.25 2.25 0 0 1 2.25 2.25v5.75a2.25 2.25 0 0 1-2.25 2.25H13"/>',
+    lock: '<rect x="4.25" y="8" width="9.5" height="7.25" rx="1.75" fill="currentColor" stroke="none"/><path d="M6.25 8V6.25a2.75 2.75 0 0 1 5.5 0V8"/>',
+    page: '<rect x="3.75" y="2.25" width="10.5" height="13.5" rx="2.25"/><path d="M6.5 6.25h5M6.5 9h5M6.5 11.75h3"/>',
+    close: '<path d="m5 5 8 8M13 5l-8 8"/>',
+    tune: '<path d="M3 6h5.5M12.5 6H15M3 12h2.5M9.5 12H15"/><circle cx="10.5" cy="6" r="2"/><circle cx="7.5" cy="12" r="2"/>',
+    star: '<path d="m9 2.6 1.95 3.98 4.4.62-3.19 3.08.77 4.37L9 12.57l-3.93 2.08.77-4.37L2.65 7.2l4.4-.62z"/>',
+    more: '<circle cx="9" cy="3.75" r="1.35" fill="currentColor" stroke="none"/><circle cx="9" cy="9" r="1.35" fill="currentColor" stroke="none"/><circle cx="9" cy="14.25" r="1.35" fill="currentColor" stroke="none"/>',
+    chevron: '<path d="m4.5 6.75 4.5 4.5 4.5-4.5"/>',
+    globe: '<circle cx="9" cy="9" r="6.75"/><path d="M2.25 9h13.5M9 2.25c2 2 3 4.2 3 6.75s-1 4.75-3 6.75c-2-2-3-4.2-3-6.75s1-4.75 3-6.75Z"/>',
+  };
+  const glyph = (name, size, weight = 1.5) => `<svg viewBox="0 0 18 18" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${weight}" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex:none">${ICON[name]}</svg>`;
+  const LIGHTS = [["#ff5f57", "#e0443e"], ["#febc2e", "#d89e24"], ["#28c840", "#1aab29"]];
+  const lights = (x, y, z) => LIGHTS.map(([fill, ring], i) => `<span style="position:absolute;left:${(x + i * 20) * z}px;top:${(y - 6) * z}px;width:${12 * z}px;height:${12 * z}px;border-radius:50%;background:${fill};box-shadow:inset 0 0 0 ${0.5 * z}px ${ring}"></span>`).join("");
+  let browserUI = null;
+
+  function drawBrowser(m, kind) {
+    const safari = kind === "safari", BAR = safari ? 52 : 87, RADIUS = safari ? 14 : 12;
+    const fit = Math.min(WINDOW_FIT[0] / m.width, (WINDOW_FIT[1] + 60 - BAR) / (m.height + BAR), 1.25), z = fit;
+    const W = m.width * fit, bar = BAR * z, H = m.height * fit + bar, top = WINDOW_Y - H / 2;
+    scale = fit;
+    geometry = { left: DEVICE_X - W / 2, right: DEVICE_X + W / 2, screenTop: top + bar, screenHeight: m.height * fit };
+    Object.assign(device.style, { width: W + "px", height: H + "px", left: DEVICE_X - W / 2 + "px", top: top + "px", marginTop: 0, borderRadius: RADIUS * z + "px", background: "#fff",
+      boxShadow: "0 0 0 1px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06), 0 22px 44px -12px rgb(0 0 0 / 0.22), 0 48px 90px -24px rgb(0 0 0 / 0.22)" });
+    Object.assign(screen.style, { left: 0, top: bar + "px", width: W + "px", height: m.height * fit + "px", background: "#fff", borderRadius: `0 0 ${RADIUS * z}px ${RADIUS * z}px` });
+    area = { x: 0, y: 0, w: W, h: m.height * fit };
+    hardware.style.display = "none";
+    const px = (v) => v * z + "px", text = (size, weight, color) => `font:${weight} ${size * z}px/1 -apple-system,system-ui;color:${color};letter-spacing:${size < 13 ? 0 : -0.005}em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`;
+    if (safari) {
+      // One 52pt toolbar: window buttons, sidebar, back and forward, a centred address field, share, new tab, tab overview.
+      const field = Math.max(280, Math.min(620, m.width * 0.44));
+      chrome.innerHTML = `<div style="position:absolute;inset:0 0 auto 0;height:${bar}px;border-radius:${px(RADIUS)} ${px(RADIUS)} 0 0;background:#f6f6f6;box-shadow:inset 0 ${-0.5 * z}px 0 rgb(0 0 0 / 0.16);color:#5a5a5e">
+        ${lights(20, 26, z)}
+        <div style="position:absolute;left:${px(92)};top:0;height:${bar}px;display:flex;align-items:center;gap:${px(18)}">${glyph("sidebar", 18 * z)}<span style="display:flex;gap:${px(14)}">${glyph("back", 18 * z, 1.7)}<span style="opacity:0.32">${glyph("forward", 18 * z, 1.7)}</span></span></div>
+        <div style="position:absolute;left:50%;top:${px(11)};width:${px(field)};height:${px(30)};margin-left:${px(-field / 2)};border-radius:${px(8)};background:rgb(0 0 0 / 0.055);display:flex;align-items:center;justify-content:center;gap:${px(5)}">
+          <span style="position:absolute;left:${px(9)};top:${px(7.5)};color:#6e6e73">${glyph("page", 15 * z, 1.4)}</span>
+          <span data-lock style="color:#6e6e73;display:none">${glyph("lock", 11 * z, 1.6)}</span>
+          <span data-host style="${text(13, 400, "#1d1d1f")}"></span>
+          <span style="position:absolute;right:${px(9)};top:${px(7.5)};color:#6e6e73">${glyph("reload", 15 * z, 1.5)}</span>
+        </div>
+        <div style="position:absolute;right:${px(18)};top:0;height:${bar}px;display:flex;align-items:center;gap:${px(18)}">${glyph("share", 18 * z)}${glyph("plus", 18 * z)}${glyph("tabs", 18 * z)}</div>
+      </div>`;
+    } else {
+      // A 41pt tab strip with one tab, then a 46pt toolbar: back, forward, reload, the address pill, profile, menu.
+      chrome.innerHTML = `<div style="position:absolute;inset:0 0 auto 0;height:${bar}px;border-radius:${px(RADIUS)} ${px(RADIUS)} 0 0;background:#e3e5e8;overflow:hidden;color:#474a4f">
+        ${lights(13, 20.5, z)}
+        <div style="position:absolute;left:${px(84)};top:${px(7)};width:${px(240)};height:${px(34)};border-radius:${px(10)} ${px(10)} 0 0;background:#fff;display:flex;align-items:center;gap:${px(8)};padding:0 ${px(10)} 0 ${px(12)};box-sizing:border-box">
+          <span style="position:absolute;left:${px(-10)};bottom:0;width:${px(10)};height:${px(10)};background:radial-gradient(circle at 0 0, transparent ${px(10)}, #fff ${px(10.5)})"></span>
+          <span style="position:absolute;right:${px(-10)};bottom:0;width:${px(10)};height:${px(10)};background:radial-gradient(circle at 100% 0, transparent ${px(10)}, #fff ${px(10.5)})"></span>
+          <img data-icon alt="" style="width:${px(16)};height:${px(16)};border-radius:${px(3)};flex:none;display:none" /><span data-globe style="color:#5f6368">${glyph("globe", 16 * z, 1.3)}</span>
+          <span data-title style="flex:1;min-width:0;${text(12, 400, "#1f1f1f")}"></span>
+          <span style="color:#5f6368">${glyph("close", 14 * z, 1.5)}</span>
+        </div>
+        <div style="position:absolute;left:${px(336)};top:${px(15)};color:#474a4f">${glyph("plus", 16 * z, 1.5)}</div>
+        <div style="position:absolute;right:${px(14)};top:${px(15)};color:#474a4f">${glyph("chevron", 16 * z, 1.6)}</div>
+        <div style="position:absolute;left:0;right:0;top:${px(41)};height:${px(46)};background:#fff;box-shadow:inset 0 ${-1 * z}px 0 #dadce0">
+          <div style="position:absolute;left:${px(14)};top:0;height:${px(46)};display:flex;align-items:center;gap:${px(18)};color:#474a4f">${glyph("back", 18 * z, 1.7)}<span style="opacity:0.35">${glyph("forward", 18 * z, 1.7)}</span>${glyph("reload", 17 * z, 1.6)}</div>
+          <div style="position:absolute;left:${px(122)};right:${px(96)};top:${px(6)};height:${px(34)};border-radius:${px(17)};background:#eef1f4;display:flex;align-items:center;gap:${px(9)};padding:0 ${px(12)} 0 ${px(6)};box-sizing:border-box">
+            <span style="display:grid;place-items:center;width:${px(24)};height:${px(24)};border-radius:50%;background:#fff;color:#474a4f;flex:none">${glyph("tune", 14 * z, 1.4)}</span>
+            <span style="flex:1;min-width:0;${text(14, 400, "#1f1f1f")}"><span data-host></span><span data-path style="color:#5f6368"></span></span>
+            <span style="color:#474a4f">${glyph("star", 16 * z, 1.4)}</span>
+          </div>
+          <div style="position:absolute;right:${px(14)};top:0;height:${px(46)};display:flex;align-items:center;gap:${px(14)};color:#474a4f">
+            <span style="width:${px(24)};height:${px(24)};border-radius:50%;background:linear-gradient(#c8ccd2,#aeb3bb)"></span>${glyph("more", 17 * z)}
+          </div>
+        </div>
+      </div>`;
+    }
+    browserUI = { page: -1, pages: m.pages ?? [], host: chrome.querySelector("[data-host]"), path: chrome.querySelector("[data-path]"), title: chrome.querySelector("[data-title]"), icon: chrome.querySelector("[data-icon]"), globe: chrome.querySelector("[data-globe]"), lock: chrome.querySelector("[data-lock]") };
+    showPage(0);
+  }
+
+  // The title bar follows the page that was on screen at that moment of the recording.
+  function showPage(seconds) {
+    if (!browserUI || !browserUI.pages.length) return;
+    let i = 0;
+    while (i + 1 < browserUI.pages.length && browserUI.pages[i + 1].t <= seconds + 0.02) i++;
+    if (i === browserUI.page) return;
+    const page = browserUI.pages[i];
+    browserUI.page = i;
+    browserUI.host.textContent = page.host;
+    if (browserUI.path) browserUI.path.textContent = page.path;
+    if (browserUI.title) browserUI.title.textContent = page.title || page.host;
+    if (browserUI.lock) browserUI.lock.style.display = page.secure ? "block" : "none";
+    if (browserUI.icon) {
+      browserUI.icon.style.display = page.icon ? "block" : "none";
+      browserUI.globe.style.display = page.icon ? "none" : "block";
+      if (page.icon) browserUI.icon.src = page.icon;
+    }
+  }
+
+  function drawDevice(m, config) {
+    const [cw, ch] = DEVICE.caseMm, [dw, dh] = DEVICE.displayMm;
+    const k = DEVICE_H / ch, bx = (cw - dw) / 2, by = (ch - dh) / 2, W = cw * k, H = DEVICE_H;
+    scale = (dw * k) / DEVICE.points;
+    const top = (document.documentElement.clientHeight - H) / 2;
+    geometry = { left: DEVICE_X - W / 2, right: DEVICE_X + W / 2, screenTop: top + by * k, screenHeight: dh * k };
+    Object.assign(device.style, { width: W + "px", height: H + "px", left: geometry.left + "px", marginTop: -H / 2 + "px" });
+    Object.assign(screen.style, { left: bx * k + "px", top: by * k + "px", width: dw * k + "px", height: dh * k + "px" });
+    const tangent = DEVICE.corner[0][0];
+    screen.style.clipPath = `path("${outline(dw * k, dh * k, k * (tangent - bx) / tangent, 0, 0)}")`;
+    touch.style.width = touch.style.height = DOT_R * 2 * scale + "px";
+    area = { x: 0, y: 0, w: dw * k, h: dh * k };
+    if (m.pointer) {
+      // A recorded web page has no status bar: it gets the space under one, and the Dynamic Island is drawn.
+      const topInset = SAFE_TOP * scale, pageH = m.height * (dw * k / m.width);
+      area = { x: 0, y: topInset, w: dw * k, h: pageH };
+      Object.assign(img.style, { top: topInset + "px", height: pageH + "px" });
+      screen.style.background = config.insetColor ?? "#fff";
+      const [iw, ih] = DEVICE.island, island = $("island");
+      Object.assign(island.style, { display: "block", width: iw * k + "px", height: ih * k + "px", left: (dw - iw) / 2 * k + "px", top: (DEVICE.islandY - by - ih / 2) * k + "px" });
+      geometry.screenTop += topInset; geometry.screenHeight = pageH;
+    }
+    const rim = DEVICE.rimMm, pr = DEVICE.protrusion * k, bw = 1.6 * k;
+    const button = (x, [centre, length]) =>
+      `<rect x="${x}" y="${(centre - length / 2) * k}" width="${bw}" height="${length * k}" rx="${pr}" fill="#8e8f94"/>`;
+    hardware.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    hardware.innerHTML = `
+      <defs><linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#c9cacf"/><stop offset="0.5" stop-color="#a4a5ab"/><stop offset="1" stop-color="#bfc0c6"/>
+      </linearGradient></defs>
+      ${DEVICE.left.map((b) => button(-pr, b)).join("")}
+      ${DEVICE.right.map((b) => button(W - bw + pr, b)).join("")}
+      <path d="${outline(W, H, k, 0, 0)}" fill="url(#metal)"/>
+      <path d="${outline(W - 2 * rim * k, H - 2 * rim * k, k * (tangent - rim) / tangent, rim * k, rim * k)}" fill="#050506"/>`;
+  }
+
+  // The simulator stamps frames a few ms early or late, which would put two frames in one
+  // 60fps slot and none in the next. Inside motion each timestamp is eased toward its neighbours.
+  function evenOut(times) {
+    let t = times.slice();
+    for (let pass = 0; pass < 2; pass++) {
+      const next = t.slice();
+      for (let i = 1; i + 1 < t.length; i++) {
+        if (t[i] - t[i - 1] < 0.05 && t[i + 1] - t[i] < 0.05) next[i] = 0.25 * t[i - 1] + 0.5 * t[i] + 0.25 * t[i + 1];
+      }
+      t = next;
+    }
+    return t;
+  }
+
+  const json = (file) => fetch(file).then((r) => r.json());
+  window.ready = Promise.all([json("narration.json"), json("out/narration/speech.json"), document.fonts.ready])
+    .then(async ([config, speech]) => {
+      const m = await json(`${config.clip}/frames.json`);
+      if (!m.track) m.pts = evenOut(m.pts); // a web-record.cjs clip is already on an exact 60fps grid
+      meta = m;
+      clip = config.clip;
+      const kind = config.frame ?? "iphone";
+      if (kind === "macbook") drawMacbook(m);
+      else if (kind === "safari" || kind === "chrome") drawBrowser(m, kind);
+      else if (kind === "window") drawWindow(m, config.windowTitle);
+      else drawDevice(m, config);
+      if (kind !== "iphone") touch.style.width = touch.style.height = DOT_R * 2 * scale + "px";
+      const useCursor = m.pointer === "cursor" && !!m.track;
+      cursor.style.display = useCursor ? "block" : "none";
+      if (useCursor) {
+        const z = scale * CURSOR_SCALE, arrow = cursor.querySelector(".arrow"), hand = cursor.querySelector(".hand");
+        // Hotspots from NSCursor: arrow (5,5) at 28×40, hand (12,8) at 32×32.
+        Object.assign(arrow.style, { left: -5 * z + "px", top: -5 * z + "px", width: 28 * z + "px", height: 40 * z + "px" });
+        Object.assign(hand.style, { left: -12 * z + "px", top: -8 * z + "px", width: 32 * z + "px", height: 32 * z + "px" });
+        await Promise.all([arrow.decode(), hand.decode()]);
+      }
+      config.touches = config.touches ?? m.clicks ?? [];
+      const leadIn = useCursor ? LEAD_IN_CURSOR : LEAD_IN;
+
+      // Offset between the recording's clock and the touch timestamps: the one that lines
+      // the most touches up with a burst. Touches are then placed at their real time.
+      const raw = config.touches.map((g) => g.t ?? (g.ms - m.startMs) / 1000);
+      const timed = raw.filter((_, i) => config.touches[i].t === undefined);
+      const hits = (o) => timed.filter((r) => m.bursts.some((b) => Math.abs(b - r - o) <= 0.05)).length;
+      let offset = 0, best = -1;
+      for (const r of timed) for (const b of m.bursts) {
+        const o = b - r;
+        if (Math.abs(o) <= 1 && hits(o) > best) { best = hits(o); offset = o; }
+      }
+      window.OFFSET = { offset, matched: best, of: timed.length };
+      const at = config.touches.map((g, i) => g.t ?? raw[i] + offset);
+
+      // Each chapter owns a slice of the recording, with still stretches cut to MAX_IDLE.
+      const starts = config.chapters.map((c) => (c.at !== undefined ? c.at : c.from === undefined ? null : Math.max(0, at[c.from] - leadIn)));
+      let T = 0, last = null;
+      chapters = config.chapters.map((c, i) => {
+        const audio = speech.chapters[i], speechAt = c.speechAt ?? SPEECH_AT;
+        const idle = c.maxIdle ?? MAX_IDLE;
+        let frames = [], out = [], footage = 0, mine = [];
+        if (starts[i] !== null) {
+          const next = starts.slice(i + 1).find((s) => s !== null) ?? m.duration + 1;
+          let f = 0;
+          while (f + 1 < m.pts.length && m.pts[f + 1] <= starts[i]) f++;
+          for (; f < m.pts.length && m.pts[f] < next; f++) frames.push({ index: f, pts: Math.max(m.pts[f], starts[i]) });
+          out = [0];
+          for (let j = 1; j < frames.length; j++) out.push(out[j - 1] + Math.min(frames[j].pts - frames[j - 1].pts, idle));
+          footage = out[out.length - 1] + 0.3;
+          const local = (s) => {
+            let j = 0;
+            while (j + 1 < frames.length && frames[j + 1].pts <= s) j++;
+            return out[j] + Math.min(Math.max(s - frames[j].pts, 0), idle);
+          };
+          mine = config.touches.map((g, j) => ({ ...g, at: at[j] })).filter((g) => g.at >= starts[i] && g.at < next)
+            .map((g) => { const down = local(g.at) - 1 / 60; return { ...g, down, up: down + (g.dur ?? HOLD) }; });
+          last = frames[frames.length - 1].index;
+        }
+        const chapter = {
+          title: c.title, text: c.text, start: T, frames, out, hold: last, touches: mine, audio, speechAt,
+          duration: Math.max(footage, speechAt + audio.duration + BREATH),
+        };
+        T += chapter.duration;
+        return chapter;
+      });
+      window.DURATION = T;
+      moves = useCursor ? [] : chapters.flatMap((c) => c.touches.map((g) => ({ ...g, down: c.start + g.down, up: c.start + g.up })));
+      window.AUDIO = chapters.map((c) => ({ file: c.audio.file, at: c.start + c.speechAt }));
+      window.CHAPTERS = chapters.map((c) => ({ title: c.title, text: c.text, start: c.start, duration: c.duration, touches: c.touches.map((g) => c.start + g.down) }));
+
+      // Notes: a hairline from the phone's edge with a label sitting on it.
+      chapters.forEach((c, i) => {
+        c.notes = (config.chapters[i].notes ?? []).map((note) => {
+          const el = document.createElement("div");
+          el.className = `note ${note.side}`;
+          el.innerHTML = "<span></span>";
+          el.firstChild.textContent = note.label;
+          el.style.top = geometry.screenTop + note.y * geometry.screenHeight + "px";
+          el.style.width = NOTE_LENGTH + "px";
+          el.style.left = (note.side === "left" ? geometry.left - NOTE_GAP - NOTE_LENGTH : geometry.right + NOTE_GAP) + "px";
+          el.style.opacity = 0;
+          $("notes").append(el);
+          return { el, side: note.side, at: note.at ?? 0.6, until: note.until ?? c.duration - 0.25 };
+        });
+      });
+
+      // Caption phrases: one dark pill per phrase, measured once so it can grow word by word.
+      chapters.forEach((c) => {
+        const groups = [];
+        let words = [];
+        const flush = () => { if (words.length) groups.push(words); words = []; };
+        for (const w of c.audio.words) {
+          words.push(w);
+          if (/[.!?,;:]$/.test(w.w) && words.length >= 2 || words.length >= PHRASE_WORDS) flush();
+        }
+        flush();
+        c.phrases = groups.map((list) => {
+          const el = document.createElement("div"), line = document.createElement("div");
+          el.className = "phrase";
+          el.append(line);
+          const spans = list.map((w, j) => {
+            const span = document.createElement("span");
+            span.textContent = w.w + (j < list.length - 1 ? " " : "");
+            line.append(span);
+            return span;
+          });
+          $("captions").append(el);
+          // Right edge of each word without its trailing space.
+          const ends = spans.map((span, j) => {
+            const range = document.createRange();
+            range.setStart(span.firstChild, 0);
+            range.setEnd(span.firstChild, list[j].w.length);
+            return span.offsetLeft + range.getBoundingClientRect().width;
+          });
+          el.style.opacity = 0;
+          return { el, spans, words: list, ends, start: list[0].start, end: list[list.length - 1].end };
+        });
+      });
+    });
+
+  window.render = async (t) => {
+    await window.ready;
+    let i = chapters.length - 1;
+    while (i > 0 && chapters[i].start > t) i--;
+    const c = chapters[i], local = t - c.start;
+
+    let index = c.hold;
+    if (c.frames.length) {
+      let j = 0;
+      while (j + 1 < c.out.length && c.out[j + 1] <= local + 0.5 / 60) j++;
+      index = c.frames[j].index;
+    }
+    if (index !== null && index !== shown) {
+      const file = `${clip}/f-${String(meta.img ? meta.img[index] : index + 1).padStart(4, "0")}.${meta.ext ?? "png"}`;
+      if (!img.src.endsWith(file)) { img.src = file; await img.decode(); }
+      shown = index;
+      showPage(meta.pts[index]);
+      if (meta.track && cursor.style.display === "block") {
+        const [cx, cy, , hand] = meta.track[index];
+        cursor.style.transform = `translate(${area.x + cx * area.w}px, ${area.y + cy * area.h}px)`;
+        cursor.querySelector(".arrow").style.display = hand ? "none" : "block";
+        cursor.querySelector(".hand").style.display = hand ? "block" : "none";
+      }
+    }
+
+    // The dot is drawn only where touches were sent. Between two touches close in time it
+    // glides from one to the next; after a longer rest it fades and comes back near the next one.
+    const active = moves.find((g) => t >= g.down && t <= g.up);
+    const before = moves.filter((g) => g.up < t).pop(), after = moves.find((g) => g.down > t);
+    let opacity = 0, size = 1, x = 0, y = 0;
+    if (active) {
+      const u = active.x2 === undefined ? 0 : clamp((t - active.down) / (active.up - active.down));
+      x = active.x + ((active.x2 ?? active.x) - active.x) * u;
+      y = active.y + ((active.y2 ?? active.y) - active.y) * u;
+      opacity = 1; size = 0.86;
+    } else {
+      const from = before && { x: before.x2 ?? before.x, y: before.y2 ?? before.y };
+      const sinceUp = before ? t - before.up : Infinity, untilDown = after ? after.down - t : Infinity;
+      const release = before ? 0.86 + 0.14 * easeOut(clamp(sinceUp / 0.12)) : 1;
+      if (before && after && after.down - before.up <= REST_MAX) {
+        const glide = Math.min(GLIDE, (after.down - before.up) * 0.8);
+        const u = easeInOut(clamp((t - (after.down - ARRIVE - glide)) / glide));
+        x = from.x + (after.x - from.x) * u; y = from.y + (after.y - from.y) * u;
+        opacity = 1; size = release;
+      } else if (untilDown <= APPEAR + ARRIVE) {
+        // Comes in from the side of the last touch, or from below right at the start.
+        let dx = from ? from.x - after.x : 0.06, dy = from ? from.y - after.y : 0.08;
+        const length = Math.hypot(dx, dy) || 1;
+        dx = dx / length * 0.1; dy = dy / length * 0.1;
+        const u = easeInOut(clamp((APPEAR + ARRIVE - untilDown) / APPEAR));
+        x = after.x + dx * (1 - u); y = after.y + dy * (1 - u);
+        opacity = clamp((APPEAR + ARRIVE - untilDown) / 0.2);
+      } else if (before && sinceUp <= LINGER + FADE) {
+        x = from.x; y = from.y; size = release;
+        opacity = 1 - easeOut(clamp((sinceUp - LINGER) / FADE));
+      }
+    }
+    const r = DOT_R * scale;
+    touch.style.opacity = opacity;
+    touch.style.background = active ? "rgb(50 50 50 / 0.5)" : "rgb(70 70 70 / 0.42)";
+    touch.style.transform = `translate(${area.x + x * area.w - r}px, ${area.y + y * area.h - r}px) scale(${size})`;
+
+    for (const [n, chapter] of chapters.entries()) {
+      for (const note of chapter.notes) {
+        const show = n === i ? Math.min(easeOut(clamp((local - note.at) / 0.35)), 1 - easeOut(clamp((local - note.until) / 0.25))) : 0;
+        note.el.style.opacity = show;
+        note.el.style.transform = `translateX(${(1 - show) * (note.side === "left" ? -14 : 14)}px)`;
+      }
+      const spoken = local - chapter.speechAt;
+      for (const [p, phrase] of chapter.phrases.entries()) {
+        const next = chapter.phrases[p + 1];
+        const leaves = next ? next.start - 0.05 : phrase.end + 0.6;
+        const on = n === i && spoken >= phrase.start - 0.05 && spoken < leaves + (next ? 0 : 0.25);
+        if (!on) { phrase.el.style.opacity = 0; continue; }
+        // The pill is as wide as the words spoken so far and eases to each new width.
+        let k = 0;
+        while (k + 1 < phrase.words.length && phrase.words[k + 1].start <= spoken) k++;
+        const u = easeOut(clamp((spoken - phrase.words[k].start + 0.03) / 0.3));
+        const inner = k === 0 ? phrase.ends[0] : phrase.ends[k - 1] + (phrase.ends[k] - phrase.ends[k - 1]) * u;
+        const width = inner + 52;
+        phrase.el.style.width = width + "px";
+        phrase.el.style.transform = `translateX(${-width / 2}px)`;
+        phrase.el.style.opacity = Math.min(easeOut(clamp((spoken - phrase.start + 0.05) / 0.15)), next ? 1 : 1 - clamp((spoken - leaves) / 0.25));
+        phrase.spans.forEach((span, j) => { span.style.opacity = easeOut(clamp((spoken - phrase.words[j].start + 0.03) / 0.18)); });
+      }
+    }
+  };
+</script>
