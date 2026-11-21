@@ -4,12 +4,14 @@ Agent skills by [Jan Rietveld](https://www.janrietveld.com) and [Pim](https://gi
 
 - [walkthrough](walkthrough/SKILL.md): a short narrated video of work an agent just finished, like a colleague's Loom. It records the real app (iOS Simulator, web, phone-sized web, Electron), cuts it into chapters, and adds a voice, captions, a touch dot or cursor, and a clean device frame. See https://walkthrough.jan.computer
 - [replicate](replicate/SKILL.md): faithfully reproduce designs, apps, websites, and service workflows through reference inspection, implementation, visual and behavioral comparison, and verification.
+- [argent-extend](argent-extend/SKILL.md): verify mobile UI transitions by replaying with Argent and examining timestamped frames, including QuickTime capture on a physical iPhone.
 
 ## Install
 
 ```sh
 npx skills add janrtvld/skills --skill walkthrough -g
 npx skills add janrtvld/skills --skill replicate -g
+npx skills add janrtvld/skills --skill argent-extend -g
 ```
 
 Then ask your agent, for example:
@@ -17,6 +19,7 @@ Then ask your agent, for example:
 ```text
 /walkthrough Show me what this pull request changed.
 /replicate Match this design, including all the small details.
+/argent-extend Check whether the composer jumps when I switch from the keyboard to Attach.
 ```
 
 ## walkthrough

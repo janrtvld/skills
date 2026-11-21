@@ -40,7 +40,7 @@ Use available tools, not assumed tool names or capabilities. Read applicable too
 - Apps: use Argent/device tools for operation, screenshots, accessibility frames, and repeatable routes. Default to a connected physical USB phone before considering a simulator. Apply platform setup/interaction skills when needed.
 - Websites: use the available browser tooling for screenshots, viewport states, interactions, and layout inspection. Test the relevant responsive widths and input modes.
 - Screenshots: inspect at full resolution and crop regions for analysis. Measure in logical units when device scale is known; do not confuse screenshot pixels with layout points.
-- Motion: capture video with supported recording tools and inspect frames/contact sheets. Measure position against time, including the final settling frames. Use recordings to study motion, not to claim display FPS they cannot establish.
+- Motion: capture video with supported recording tools and inspect frames/contact sheets. Measure position against time, including the final settling frames. Use recordings to study motion, not to claim display FPS they cannot establish. For mobile transitions where timing or gestures matter, use `argent-extend` when available.
 - Performance: use native profilers/Instruments for native apps or browser performance tooling for web apps. Read relevant profiling skills. Animation/UI-polish skills supplement reference evidence; their general preferences must not override the requested design.
 - Services: use documented APIs, available connectors, and controlled test data to compare observable contracts. Avoid destructive probes and unnecessary paid requests.
 
