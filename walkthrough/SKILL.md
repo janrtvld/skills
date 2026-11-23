@@ -186,9 +186,9 @@ node scripts/narrate.cjs mux out/silent.mp4 out/<name>-<n>s.mp4
 
 ## 9. Hand it over
 
-The user wants to watch it, not read about it.
+Hand the user the file and keep the message short. They open it when they want to.
 
-1. Open the video so it plays (`open out/<file>.mp4`) and say you did. Then, in two or three lines: what it shows, how long it is, and where the file is. Say plainly that you have not listened to the audio, if that is so, and list anything the video could not verify or where the recording differs from the real product (test data, a stubbed service, a debug build).
+1. Do not open or play the video yourself: nothing should pop up on the user's screen. Give the file as a clickable path, and in two or three lines say what it shows, how long it is, and where it is. Say plainly that you have not listened to the audio, if that is so, and list anything the video could not verify or where the recording differs from the real product (test data, a stubbed service, a debug build).
 2. Offer one next step, not a menu. Signed in: ask whether they want a link to share it (§10). Built-in voice: nothing to ask; after their first video only, add one line that the natural voice is one sign-in away.
 3. If they want something changed (wording, a cut, a different moment), change only that: speech is cached per chapter, and footage that is still right does not need recording again.
 4. Later videos skip all the questions: the voice choice is remembered, so go straight from picking the change to recording.
