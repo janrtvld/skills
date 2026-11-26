@@ -6,6 +6,7 @@ Agent skills by [Jan Rietveld](https://www.janrietveld.com) and [Pim](https://gi
 - [replicate](replicate/SKILL.md): faithfully reproduce designs, apps, websites, and service workflows through reference inspection, implementation, visual and behavioral comparison, and verification.
 - [argent-extend](argent-extend/SKILL.md): verify mobile UI transitions by replaying with Argent and examining timestamped frames on a release build, with two ways to record a physical iPhone, scripts that measure movement per frame, and rules for telling a tool artefact from an app defect.
 - [interaction-audit](interaction-audit/SKILL.md): audit how a mobile app feels in use on a real phone, against nine principles that a design file and a screenshot cannot show.
+- [preflight](preflight/SKILL.md): before a long or unattended task, ask the owner for every permission, credential, device and decision in one message, and raise new blockers at once.
 
 ## Install
 
@@ -14,6 +15,7 @@ npx skills add janrtvld/skills --skill walkthrough -g
 npx skills add janrtvld/skills --skill replicate -g
 npx skills add janrtvld/skills --skill argent-extend -g
 npx skills add janrtvld/skills --skill interaction-audit -g
+npx skills add janrtvld/skills --skill preflight -g
 ```
 
 Then ask your agent, for example:
@@ -23,6 +25,7 @@ Then ask your agent, for example:
 /replicate Match this design, including all the small details.
 /argent-extend Check whether the composer jumps when I switch from the keyboard to Attach.
 /interaction-audit Go through the app on the phone before I look at it.
+/preflight I'm away until tomorrow; tell me now what you need to finish this.
 ```
 
 ## walkthrough
