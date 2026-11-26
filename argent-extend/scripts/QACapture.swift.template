@@ -1,0 +1,134 @@
+import Foundation
+
+#if DEBUG || QA_CAPTURE
+import ReplayKit
+import AVFoundation
+import UIKit
+
+/// QA only (DEBUG builds, or builds compiled with the QA_CAPTURE condition; never ship it): records the app's own screen with ReplayKit
+/// into `Documents/capture.mov` (H.264, native resolution, real presentation timestamps, no audio),
+/// so motion can be inspected frame by frame without any Mac-side permission.
+///
+/// Trigger: launch argument `-QACapture <seconds>` (also readable as the UserDefaults key
+/// `QACapture`). Recording starts ~1.5 s after launch, stops by itself after `<seconds>`.
+/// ReplayKit asks for consent ("Allow ... to record your screen?") on start; tap "Record Screen & Audio"
+/// / "Allow" once. Status lines go to `Documents/capture.log`.
+final class QACapture {
+  static let shared = QACapture()
+
+  private let queue = DispatchQueue(label: "qa.capture")
+  private var writer: AVAssetWriter?
+  private var input: AVAssetWriterInput?
+  private var startPTS: CMTime?
+  private var frames = 0
+  private var running = false
+
+  private var docs: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
+  private var outURL: URL { docs.appendingPathComponent("capture.mov") }
+
+  func log(_ line: String) {
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    let url = docs.appendingPathComponent("capture.log")
+    let data = (stamp + " " + line + "\n").data(using: .utf8)!
+    if let h = try? FileHandle(forWritingTo: url) {
+      h.seekToEndOfFile(); h.write(data); try? h.close()
+    } else {
+      try? data.write(to: url)
+    }
+  }
+
+  /// Reads `-QACapture <seconds>` and schedules the recording.
+  func startFromLaunchArguments() {
+    var seconds = UserDefaults.standard.double(forKey: "QACapture")
+    let args = ProcessInfo.processInfo.arguments
+    if let i = args.firstIndex(of: "-QACapture"), i + 1 < args.count, let s = Double(args[i + 1]) { seconds = s }
+    if seconds > 0 {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.start(seconds: min(seconds, 600)) }
+    }
+    watchTriggerFiles()
+  }
+
+  /// Second trigger, no relaunch: `devicectl device copy to` a file `Documents/capture.start` whose text is
+  /// the number of seconds (or `Documents/capture.stop`, any content, to finish early). Polled once a second.
+  private func watchTriggerFiles() {
+    Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+      guard let self = self else { return }
+      let fm = FileManager.default
+      let startFile = self.docs.appendingPathComponent("capture.start")
+      let stopFile = self.docs.appendingPathComponent("capture.stop")
+      if fm.fileExists(atPath: stopFile.path) {
+        try? fm.removeItem(at: stopFile)
+        self.stop()
+      }
+      if fm.fileExists(atPath: startFile.path) {
+        let text = (try? String(contentsOf: startFile, encoding: .utf8)) ?? ""
+        try? fm.removeItem(at: startFile)
+        self.start(seconds: min(Double(text.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 30, 600))
+      }
+    }
+  }
+
+  func start(seconds: Double) {
+    guard !running else { log("start ignored (already recording)"); return }
+    try? FileManager.default.removeItem(at: docs.appendingPathComponent("capture.log"))
+    let recorder = RPScreenRecorder.shared()
+    guard recorder.isAvailable else { log("recorder unavailable"); return }
+    try? FileManager.default.removeItem(at: outURL)
+    writer = nil; input = nil; startPTS = nil; frames = 0
+    recorder.isMicrophoneEnabled = false
+    log("startCapture requested (\(seconds)s)")
+    recorder.startCapture(handler: { [weak self] buffer, type, error in
+      guard let self = self, error == nil, type == .video else { return }
+      self.queue.async { self.append(buffer) }
+    }, completionHandler: { [weak self] error in
+      guard let self = self else { return }
+      if let error = error { self.log("start failed: \(error.localizedDescription)"); return }
+      self.running = true
+      self.log("capturing")
+      DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { self.stop() }
+    })
+  }
+
+  private func append(_ buffer: CMSampleBuffer) {
+    guard CMSampleBufferDataIsReady(buffer) else { return }
+    if writer == nil {
+      guard let pixels = CMSampleBufferGetImageBuffer(buffer) else { return }
+      let width = CVPixelBufferGetWidth(pixels), height = CVPixelBufferGetHeight(pixels)
+      guard let w = try? AVAssetWriter(outputURL: outURL, fileType: .mov) else { return }
+      let settings: [String: Any] = [
+        AVVideoCodecKey: AVVideoCodecType.h264,
+        AVVideoWidthKey: width,
+        AVVideoHeightKey: height,
+        AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 12_000_000, AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel],
+      ]
+      let i = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
+      i.expectsMediaDataInRealTime = true
+      guard w.canAdd(i) else { return }
+      w.add(i)
+      let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+      guard w.startWriting() else { log("writer failed: \(String(describing: w.error))"); return }
+      w.startSession(atSourceTime: pts)
+      writer = w; input = i; startPTS = pts
+      log("first frame \(width)x\(height)")
+    }
+    guard let i = input, i.isReadyForMoreMediaData, writer?.status == .writing else { return }
+    if i.append(buffer) { frames += 1 }
+  }
+
+  func stop() {
+    guard running else { log("stop ignored (not running)"); return }
+    running = false
+    log("stopCapture")
+    RPScreenRecorder.shared().stopCapture { [weak self] error in
+      guard let self = self else { return }
+      self.log("stopCapture done \(String(describing: error))")
+      self.queue.async {
+        guard let w = self.writer, let i = self.input else { self.log("stopped, no frames"); return }
+        i.markAsFinished()
+        let frames = self.frames
+        w.finishWriting { self.log("finished: \(frames) frames, status \(w.status.rawValue) \(String(describing: w.error))") }
+      }
+    }
+  }
+}
+#endif

@@ -1,142 +1,142 @@
 ---
 name: interaction-audit
-description: Audit how a mobile app feels in use, on a real phone, against the principles that separate a finished interface from a working one - immediate response, motion that follows the hand, stable layout, parts that move as one, owned screen edges, focus kept in view, platform behaviour, exact small details, and grace under stress. Use after building or changing screens, before calling UI work done or showing it to anyone, and when the feedback is "it works but feels off". Works from a design alone; needs no reference app. Not for matching a design's pixels (use replicate) and not a code review.
+description: "Audit how a mobile app feels in the hand, on a real phone, and fix what makes it feel unfinished. Sweeps nine lanes a design file and a screenshot cannot show: response to touch, motion that follows the finger, layout stability, parts that move together, screen edges and system bars, keyboard and focus, platform behaviour, small-detail precision, and behaviour under stress. Use after building or changing screens in a React Native, Expo or native app, before calling UI work done or showing it to anyone, and when the feedback is \"it works but feels off\". Works from a design alone; needs no reference app. Triggers on: interaction audit, feel, feels off, feels cheap, janky, jumpy, polish pass, device QA, before review, layout shift, flicker, snap, collapsing header, bottom sheet, keyboard covers input, status bar, overscroll, safe area, press feedback, swipe between tabs, back gesture, release build."
 ---
 
 # Interaction Audit
 
-A design file shows one state per screen, and a screenshot proves one frame. What makes an app feel cheap happens between frames and at the edges: a header that snaps, a sheet that resizes, a keyboard that covers what was just typed. Those defects pass every static check. This audit looks for them on purpose, before the owner finds them.
+An audit skill. It does one thing: put a mobile app in a real hand before a person does, find what makes it feel unfinished, and fix it.
 
-The audit is a set of principles, each with the questions to ask and the usual ways it breaks. Apply the principles to whatever the app has. They are not a checklist of components.
+A design file shows one state per screen. A screenshot proves one frame. What makes an app feel cheap lives between frames and at the edges: a header that snaps past a threshold, a sheet that shrinks for a spinner, a keyboard that covers the comment just typed, a white band behind a bounce. Every one of those passes a static check, and static checks are what an agent reaches for by default.
 
-## How to audit
+| Lane | File | What it catches |
+| --- | --- | --- |
+| A. Response | [response.md](response.md) | Touches with no answer, waits with no sign of work |
+| B. Follow | [follow.md](follow.md) | Motion triggered by thresholds instead of driven by the finger |
+| C. Stability | [stability.md](stability.md) | Things that move, resize or flash without the user causing it |
+| D. Together | [together.md](together.md) | Parts of one change running on separate timelines |
+| E. Edges | [edges.md](edges.md) | System bars, safe areas and overscroll that look unowned |
+| F. Focus | [focus.md](focus.md) | The keyboard, and losing what the user was doing |
+| G. Platform | [platform.md](platform.md) | Gestures and system surfaces that do not behave like the phone |
+| H. Precision | [precision.md](precision.md) | Off-centre labels, clipped text, inconsistent parts |
+| I. Stress | [stress.md](stress.md) | Slow network, interruptions, large text, slow hardware |
 
-**Use the build users get, on a phone.** Audit a release build on a physical device, the slowest one available first. Development builds run slower, draw their own chrome and hide system-bar and timing defects. Simulators invent keyboard and audio behaviour. A finding from either is a lead, not a verdict.
+Each lane file is a short catalog of checks: why it matters, how to probe it on the device, when it passes, and the direction of the fix. Load a lane file when you sweep that lane. Recording, driving held gestures, reading frames and telling a tool artefact from an app defect are the job of `argent-extend`: load it before the first motion check. Matching a design's pixels is `replicate`.
 
-**Match the evidence to the claim.** A still image proves a settled state and nothing else.
+## Operating posture
 
-| Claim | Evidence |
-|---|---|
-| A resting state: colour, alignment, wording | One screenshot |
-| Something follows the finger | The gesture held at several points along its travel, or recorded frames |
-| A transition, flash, jump or resize | Recorded frames across the whole interval, each one looked at |
-| Sound or haptics | The code path, with a note that it was not perceived |
+You are a design engineer doing the pass nobody asked for, the one that decides whether the owner's first five minutes with the app go well. Assume the happy path works and the screens match the design. Assume nothing about what happens while a finger is moving, while data is arriving, or while the keyboard is up, because nobody has looked.
 
-Use `argent-extend` to record and read frames.
+Three failure modes, worst first:
 
-**Start with what is shared.** List the app's shared interactive parts (header, tab row, sheet, list, text input, button, toast, menu) and audit each on one screen first. Most defects live there, and a fix there fixes every screen. Then sweep the screens. When something fails, look for the same class of failure everywhere that part is used.
+1. **Passing motion from a still.** A screenshot before and a screenshot after says nothing about the frames between. A lane B, C or D check passed from stills is not passed.
+2. **Auditing the wrong build.** A development build is slower, mounts things at different moments and draws its own chrome. A simulator has no real keyboard, audio or thermal limits. Both hide real defects and invent false ones.
+3. **Fixing the screen instead of the part.** The defect seen on one screen lives in the header, sheet, list or input that twenty screens share. A local patch leaves nineteen copies.
 
-**Use four verdicts:** pass, fail, not applicable, not verified. Not verified names what was missing. Never round it up to pass.
+## Hard rules
 
-**Fix causes, and remove what cannot be made right.** A static header is better than one that collapses badly.
+1. **Release build, physical phone, slowest device first.** Anything else is a lead. Name the build type and device beside every verdict.
+2. **Evidence matches the claim.**
 
-## The principles
+   | Claim | Evidence |
+   | --- | --- |
+   | A resting state | One screenshot |
+   | Position follows the finger | The gesture stopped at three or more points of its travel, or recorded frames |
+   | A transition, flash, jump or resize | Recorded frames across the whole interval, every frame looked at |
+   | Two things overlap, or one clears another | Element frames from the accessibility tree |
+   | Sound, haptics | The code path, stated as not perceived |
 
-### 1. It answers immediately
+3. **A verdict per check: pass, fail, not applicable, not verified.** Not verified names what was missing. Never round it up. Replay every fail once before reporting it and state how often it occurred (3 of 3). Seen once and not reproduced is not verified.
+4. **Every lane, every time.** A lane skipped for budget is listed as not run in the first line of the report.
+5. **Shared parts first.** Audit each shared interactive part once before sweeping screens. When one fails, check every place it is used.
+6. **Look before you touch.** Before any hold, slow drag, fling or catch, read what is under the finger and start on something inert. Never rest on a control that calls, sends, deletes or pays. Use test data, and leave real data unchanged.
+7. **Fix causes.** The fix goes into the shared part or the shared rule. After it, replay the same probe under the same conditions.
+8. **Remove what cannot be made right.** A header that stays put beats one that collapses badly. Say that it was removed.
+9. **Defects, not taste.** A finding names what the user sees and when. "The sheet could feel nicer" is not a finding. "The backdrop is fully dark four frames before the sheet starts to move" is.
+10. **Use the project's motion values and components.** Extend its tokens and primitives; never add a parallel sheet, press handler or timing scale during an audit.
+11. **Respect recorded decisions.** If the project documents a deliberate choice, note it and move on.
 
-Every touch gets a visible answer on the same frame the finger lands, and every wait is acknowledged.
+## Workflow
 
-- Press each kind of control and hold. Something changes on press-in, and the pressed look differs from the resting look.
-- Tap things that start work. Nothing can be triggered twice, and anything slower than a moment shows that it is working.
-- Scroll with a finger resting on a row. The row does not fire.
+### Phase 1 — Recon
 
-*Breaks as:* controls that react only on release, variants whose pressed colour equals their resting colour, spinners that flash for an instant, dead time after a tap.
+- **Devices and builds:** what is connected, which build is installed, whether it is the commit under audit.
+- **Shared parts:** header, tab bar, inner tabs, sheet, dialog, list, text input, button and pressable, toast, menu. Note which screens use which.
+- **Screens:** every route, grouped by the parts it uses.
+- **Conventions:** motion tokens, press primitive, keyboard library, sheet component, how the status bar is set.
+- **Reach:** what the tools can drive on each phone and what they cannot (recording, lock button, notifications). Anything out of reach is reported as not verified, up front.
 
-### 2. Motion follows the hand
+### Phase 2 — Shared parts
 
-Anything the user drags or scrolls is positioned by where the finger is, not triggered when the finger crosses a line. Animations can be caught and reversed.
+Run every lane that applies against each shared part, on one representative screen. Fix before going wider. Most findings end here.
 
-- Move slowly and stop partway: a collapsing header, a sheet, a page between tabs, a swiped row. At each stopping point the element is where the finger put it.
-- Fling it, then catch it mid-flight. It continues from where it is.
-- Release with speed. The speed carries into the settle.
+### Phase 3 — Sweep
 
-*Breaks as:* a header that jumps when scroll passes a threshold, an indicator that moves only after the swipe ends, a sheet that ignores the finger until release, an animation that must finish before input counts.
+Walk every screen through the six questions below. Each "yes" points at a lane.
 
-### 3. Nothing moves without a cause
+```
+1. Can it be touched?                      → A. Response, H. Precision
+2. Does anything move with a finger or a scroll?   → B. Follow
+3. Does anything load, save or change by itself?   → C. Stability
+4. Do two things change at once?           → D. Together
+5. Does it scroll, or reach a screen edge? → E. Edges
+6. Can the user type, or leave and return? → F. Focus, G. Platform
+```
 
-What is on screen stays where it is unless the user moved it. Content arriving, loading finishing and state saving do not shift, resize or flash anything.
+Run lane I once per platform across the app's core flow.
 
-- Open each screen cold and warm, recorded. What was drawn first is still in the same place when data lands.
-- Watch containers that load. They hold one size through loading and after.
-- Complete an action that changes a list: send, reorder, tick. No frame shows the old state again, and nothing flickers when the server confirms.
+### Phase 4 — Vet and rank
 
-*Breaks as:* a title that appears late and pushes its neighbours, a sheet that shrinks for a spinner and grows back, a dropped item that jumps home before settling, elements that animate in on load for no reason.
+Replay every finding once more before reporting it. Then walk this, top to bottom, and stop at the first yes:
 
-### 4. Parts that belong together move together
+```
+Does it lose or hide the user's work, or block a core action?
+├── Yes → BLOCKER
+└── No
+    Will a typical user see it in the first five minutes, on any phone?
+    ├── Yes → BLOCKER
+    └── No
+        Does it show on one platform, one device, one data state or one system setting?
+        ├── Yes → SHOULD FIX
+        └── No → POLISH
+```
 
-Two things the eye reads as one change share one timeline: a sheet and its backdrop, content and the keyboard under it, a page and its tab indicator, a panel that replaces another.
+### Phase 5 — Fix and replay
 
-- Record the open and the close. Both parts start, travel and stop together.
-- Swap one bottom panel for another, in both directions. There is no gap and no double movement.
+Skip this phase when asked to audit only; report "nothing fixed".
 
-*Breaks as:* a backdrop that darkens before the sheet moves, content that jumps after the keyboard has finished, a blank band during a handoff, fixed delays that only line up on a fast phone.
 
-### 5. The app owns the whole screen
+Fix blockers, then should-fix items, in the shared part. Rebuild in release, replay the probe that failed, and replay it on the other platform.
 
-Status bar, home indicator, navigation bar, the space behind a bounce and the area around the keyboard all look intended, on every screen and inside every overlay.
+## Flag on sight
 
-- Look at the top of every screen and overlay. System icons are readable against what is behind them.
-- Pull past the top and push past the bottom. What shows continues the surface it adjoins.
-- Scroll to both ends. Nothing is cut off by an inset or hidden under a system area.
-- Scroll short and empty content. It does not behave like a long page.
+These are almost always wrong. No deliberation needed:
 
-*Breaks as:* dark icons on a dark header, a white or black band on overscroll, content under the notch, a control sitting in the system navigation area, a bar style that is wrong inside a modal.
+- A scroll handler that starts an animation when an offset crosses a number.
+- A layout property (`height`, `width`, `top`, margins) animated, or animation state updated from JavaScript every frame.
+- A keyboard listener paired with a timed animation.
+- A fixed delay (`setTimeout`) used to line two animations up.
+- A container whose size depends on whether its content has loaded.
+- A pressable with no pressed style, or a pressed style equal to its resting style.
+- A status-bar style set per screen component instead of in one place.
+- A hand-written sheet, pager, drag list or zoom view where the project already has a library for it.
+- A second sheet component.
+- A spinner with no minimum display time.
+- A text input whose value is controlled on every keystroke with no guard against dropped characters.
 
-### 6. What the user is doing stays in view
+## Output format
 
-The field being typed in, the thing just sent and the place the user was reading remain visible and stay put.
+Lead with the verdict. Do not bury the one thing that matters.
 
-- Focus every text input. It sits clear of the keyboard with breathing room, on each keyboard height the platform has.
-- Submit something. The result is visible without scrolling.
-- Leave a screen and come back, switch tabs and return. Position and state are where they were.
-- Type fast. Every character arrives.
+- **First line:** devices, builds, lanes run, lanes not run.
+- **Verdict:** **Not ready**, **Ready with fixes applied**, or **Ready**. Not ready means a blocker remains.
+- **Fixed:** what was wrong, the shared part it lived in, the commit, and the replay that confirmed it on each platform.
+- **Open blockers and should-fix:** what the user sees, where, on which device and build, the evidence (clip and timestamps or frames), the suspected cause.
+- **Not verified:** each check that could not be made and what it needs.
+- **Polish:** short, clearly optional.
 
-*Breaks as:* a keyboard touching or covering the field, a new comment hidden behind the keyboard, a list that loses its place, a "jump to latest" prompt after the user's own message, dropped keystrokes.
+Be specific. "The header is jumpy" is weak. "On the Projects screen the header stays expanded until scroll offset 60, then collapses in one frame; held at offsets 20, 40 and 60 it shows the same geometry twice and then the final one" is a finding.
 
-### 7. It behaves like the platform
+## What earns a pass
 
-Gestures and system features people already know work the way they do everywhere else on that phone.
-
-- Try the platform's way back from every screen and with every overlay open. It closes one layer at a time.
-- Swipe where pages sit side by side. Pull where a list can refresh.
-- Check pickers, sharing, calls and permissions use the system's own surfaces unless the product decided otherwise.
-- Feel for haptics on commits, toggles and pick-ups, and their absence on scrolling and plain navigation.
-
-*Breaks as:* a custom header that kills the back swipe, tabs above content that cannot be swiped, a hand-drawn picker where the system one is expected, a back button that closes two things or none.
-
-### 8. Small things are exact
-
-Text sits in the optical centre of its container, nothing is clipped, and the same part looks the same wherever it appears.
-
-- Zoom into pills, tabs, badges, buttons and input placeholders.
-- Feed the shortest and longest realistic content. Lines that should stay single stay single; nothing is cut off; truncation is deliberate.
-- Compare the same component across screens: radius, padding, pressed state.
-- Check small targets are large enough to hit and do not overlap.
-
-*Breaks as:* a label one pixel low, a clipped ascender, a timestamp wrapping onto its own line, a row of tabs cut at the edge, two sheets with different corners.
-
-### 9. It holds under stress
-
-The app keeps its composure when conditions are not ideal.
-
-- Slow and failing network: every screen has loading, empty and error states, and optimistic changes roll back visibly.
-- Interruptions: background the app mid-flow, rotate once, take a call, come back.
-- System settings: largest text size, reduced motion.
-- The slowest phone, with real amounts of content.
-
-*Breaks as:* an endless spinner, a stale screen after returning, a layout that collapses at large text, motion that stutters on older hardware.
-
-## Sensible defaults
-
-Use the project's own values when it has them. Otherwise:
-
-- **Press feedback:** scale to about 0.97, within 100 to 150 ms, from one shared primitive.
-- **Durations:** small changes 150 to 250 ms, sheets and overlays 200 to 300 ms, nothing in the interface longer than 400 ms. Exits a little faster than entrances. Frequent actions get less animation, not more.
-- **Easing:** ease-out for things arriving, never ease-in. Springs without bounce, except where a gesture carried momentum.
-- **Waiting:** show an indicator after about 150 ms, keep it at least 300 ms once shown.
-- **Touch targets:** 44 points on iOS, 48 dp on Android.
-- **Threads:** scroll- and gesture-linked motion runs off the main JavaScript thread and animates transform and opacity only.
-
-## Report
-
-Lead with what fails, most severe first. For each: the principle, where it shows, what happens, the device and build, the evidence, and the shared part it traces to. Then what was not verified and why, what was fixed during the audit and how it was re-checked, and which principles or platforms were not covered. An audit that looked at one platform or skipped a principle says so in its first line.
+The app is ready when every touch answers on press, everything that moves with a finger tracks it, nothing shifts without cause, paired parts move as one, every edge looks intended, the keyboard never hides the user's work, the platform's gestures all work, small controls are exact, and none of that breaks on the slow phone, the slow network or the largest text. If the sweep finds nothing, say so plainly and list what was checked. Manufactured findings waste the reader's trust.

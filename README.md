@@ -4,7 +4,7 @@ Agent skills by [Jan Rietveld](https://www.janrietveld.com) and [Pim](https://gi
 
 - [walkthrough](walkthrough/SKILL.md): a short narrated video of work an agent just finished, like a colleague's Loom. It records the real app (iOS Simulator, web, phone-sized web, Electron), cuts it into chapters, and adds a voice, captions, a touch dot or cursor, and a clean device frame. See https://walkthrough.jan.computer
 - [replicate](replicate/SKILL.md): faithfully reproduce designs, apps, websites, and service workflows through reference inspection, implementation, visual and behavioral comparison, and verification.
-- [argent-extend](argent-extend/SKILL.md): verify mobile UI transitions by replaying with Argent and examining timestamped frames, including QuickTime capture on a physical iPhone.
+- [argent-extend](argent-extend/SKILL.md): verify mobile UI transitions by replaying with Argent and examining timestamped frames on a release build, with two ways to record a physical iPhone, scripts that measure movement per frame, and rules for telling a tool artefact from an app defect.
 - [interaction-audit](interaction-audit/SKILL.md): audit how a mobile app feels in use on a real phone, against nine principles that a design file and a screenshot cannot show.
 
 ## Install
