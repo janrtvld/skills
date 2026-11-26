@@ -105,7 +105,7 @@ Does it lose or hide the user's work, or block a core action?
 
 Skip this phase when asked to audit only; report "nothing fixed".
 
-Before editing anything, reproduce the finding yourself and measure it a second, independent way (a different script, a crop, the element tree). A finding that does not reproduce, or that the second measurement contradicts, is reported as such and nothing is changed.
+Before editing anything, reproduce the finding yourself and measure it a second, independent way (a different script, a crop, the element tree). A finding that does not reproduce, or that the second measurement contradicts, is reported as such and nothing is changed. Defects can be intermittent: when the first replay is clean, replay at least three more times before calling it not reproduced, and report the rate.
 
 
 Fix blockers, then should-fix items, in the shared part. Rebuild in release, replay the probe that failed, and replay it on the other platform; if that platform is not available, say so in the first line of the report. Confirm with a comparison of the two builds that the fix changed nothing else on screen. A fix that the replay shows did not work is reverted in the same session, and the finding stays open with what was learned. Batch fixes per release build, and look at the first build for neighbours of the fix before spending the next.

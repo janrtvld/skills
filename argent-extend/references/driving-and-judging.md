@@ -13,6 +13,7 @@ Read what is under the finger before any hold, slow drag, fling or catch, and st
 - **A fling is a short, fast drag;** a catch is a second touch a fraction of a second later. A catch can also tap what is under the finger, so place it on something inert.
 - **Record with touch markers on** where the recorder offers it. The marker is the only record of where the injected finger really was.
 - **A cold start belongs inside the recording.** Start recording first, then force-stop and launch the app; a restart helper can return after the app has already drawn, and the launch is then missing from the clip.
+- **In the tree is not on screen.** An element can be reported as present while a launch screen or overlay still covers it. When timing a wait, wait for the old screen to go and the new one to appear, then confirm in the frames.
 - **Use the path the stop call returns.** The finished recording may not be at the path the start call printed.
 - **Start recording before the action, let the screen settle, stop promptly.** Keep real time: turn off any trimming of still stretches when timing matters.
 

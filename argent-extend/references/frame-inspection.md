@@ -33,7 +33,9 @@ scripts/shift.py clip.mp4 2.5 6.2 0.0,0.05,1.0,0.20     # rough movement of a wh
 ```
 
 - `follow.py` is dependable on a feature that is unique along the axis and stays on screen; run it on the touch marker too and compare. It misleads in two cases. A region that contains something static (a label over a moving pill) follows the static part. A plain or repeating region can match somewhere else with a low error. Low error is necessary, not sufficient: check one offset against a crop of that frame. A region as wide as the frame cannot move at all.
+- `track.py` takes a final number to print only frames whose value moved by at least that much, which turns a long clip into a short list of changes.
 - Two parts move as one when they change on the same frames from first to last.
+- During a cross-fade, brightness and crops are ambiguous: everything is partly there. Compare the measured colour of a region with what it should be at that frame's opacity, with and without the element in question.
 - A scroll-linked element is right when its movement stays in proportion to the content's. One frame that moves far more than its neighbours, while the touch marker did not, is a snap.
 - Values are in clip pixels. Convert to points through the device's scale when reporting.
 
