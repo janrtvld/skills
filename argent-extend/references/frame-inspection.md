@@ -20,16 +20,21 @@ For close inspection, add `crop=WIDTH:HEIGHT:X:Y` before `showinfo`, or crop the
 
 ## Measure instead of eyeballing
 
-The scripts beside this skill read the clip with FFmpeg and print one line per frame. Regions are given as fractions of the frame (`x0,y0,x1,y1`), times in seconds.
+The scripts beside this skill read the clip with FFmpeg and print one line per frame or per change. Regions are fractions of the frame (`x0,y0,x1,y1`), times are seconds.
 
 ```sh
-scripts/frames.sh clip.mov out 8.0 8.6 150           # every frame in the interval, out/sheet.png contact sheet, out/pts.txt timestamps
-scripts/shift.py clip.mov 8.0 8.6 0.0,0.05,1.0,0.20  # vertical movement of a region between consecutive frames
-scripts/sheet.py clip.mov 8.0 8.6                    # top edge of a bottom sheet and the dim of the page behind it
-scripts/track.py clip.mov 8.0 8.6 0.4,0.3,0.6,0.34   # mean brightness of a region; add `edge` for the position of one clean edge
+scripts/changes.py clip.mp4                             # intervals where frames differ: where to look
+scripts/frames.sh clip.mp4 out 2.4 3.1 160              # every frame of an interval, out/sheet.png contact sheet, out/pts.txt timestamps
+scripts/follow.py clip.mp4 2.5 6.2 0.91,0.22,0.97,0.25 x   # one feature's offset over time, along x or y
+scripts/column.py clip.mp4 2.5 6.2 0.5                  # brightness boundaries along a vertical line, per frame
+scripts/track.py clip.mp4 2.5 6.2 0.2,0.12,0.3,0.14     # mean brightness of a region; add `edge` for one clean edge
+scripts/sheet.py clip.mp4 2.5 6.2                       # top edge of a bottom sheet and the dim of the page behind it
+scripts/shift.py clip.mp4 2.5 6.2 0.0,0.05,1.0,0.20     # rough movement of a whole region between frames
 ```
 
-- A scroll-linked element is right when its movement per frame stays in proportion to the content's. One frame that moves far more than its neighbours is a snap.
-- Two parts that should move as one are right when both change on the same frames from first to last.
-- The scripts scale frames to a fixed small size for speed, so treat their pixel values as relative and convert through the clip's real size when reporting points.
+- `follow.py` is the dependable one. Give it something unique along the axis that stays on screen, and trust it while the error stays low. Run it on the touch marker too and compare.
+- Two parts move as one when they change on the same frames from first to last.
+- A scroll-linked element is right when its movement stays in proportion to the content's. One frame that moves far more than its neighbours, while the touch marker did not, is a snap.
+- Values are in clip pixels. Convert to points through the device's scale when reporting.
 
+Worked example, a swipe between two pages held at two stops: the touch marker read −198 and −414 px at the stops, a feature on the page read −184 and −400 px (following the finger, less the drag's start distance), and the tab indicator read 0 at both. The page passes and the indicator fails.

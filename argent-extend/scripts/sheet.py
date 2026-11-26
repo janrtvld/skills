@@ -10,7 +10,9 @@ clip, s, e = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
 xf = float(sys.argv[4]) if len(sys.argv) > 4 else 0.02
 dy = float(sys.argv[5]) if len(sys.argv) > 5 else 0.5
 white = int(sys.argv[6]) if len(sys.argv) > 6 else 252
-W, H = 221, 480
+import subprocess as _sp
+_w,_h=[int(v) for v in _sp.run(["ffprobe","-v","error","-select_streams","v:0","-show_entries","stream=width,height","-of","csv=p=0",clip],capture_output=True,text=True).stdout.strip().split(",")]
+W = 221; H = max(2, round(_h*W/_w/2)*2)
 vf = f"setpts=PTS-STARTPTS,trim=start={s}:end={e},showinfo,scale={W}:{H},format=gray"
 p = subprocess.run(['ffmpeg','-hide_banner','-nostdin','-i',clip,'-map','0:v:0','-an','-vf',vf,'-fps_mode','passthrough','-f','rawvideo','-'],capture_output=True)
 pts = [float(m) for m in re.findall(r'pts_time:([0-9.]+)', p.stderr.decode())]
