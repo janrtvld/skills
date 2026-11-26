@@ -4,14 +4,16 @@ Lessons from running this loop on real phones. Each one prevented, or would have
 
 ## Before touching
 
-Read what is under the finger before any hold, slow drag, fling or catch, and start on something inert: empty space, a heading, plain text. A hold on a row that calls, sends, deletes or pays does exactly that. If the only place to start is a live control, pick another screen for the check.
+Read what is under the finger before any hold, slow drag, fling or catch, and start on something inert: empty space, a heading, plain text. A hold on a row that calls, sends, deletes or pays does exactly that. On a full list the inert place is a gap between sections; a slow sideways drag that starts on a row can begin a reorder or a row action. If the only place to start is a live control, pick another screen for the check.
 
 ## Driving
 
-- **Put a whole timed gesture in one call.** Separate calls add tool latency between actions and the timing under test is gone. Keep element-tree queries out of the timed part.
+- **Put a whole timed gesture in one call.** Separate calls add tool latency between actions and the timing under test is gone. Keep element-tree queries out of the timed part. Batching also saves context: each separate device call can return the whole element tree, a sequence returns it once.
 - **A held gesture is one drag with stops.** About 500ms per leg and 600ms at each stop, at least two stops, with intermediate points interpolated so the finger moves smoothly. Reverse or release at the end.
 - **A fling is a short, fast drag;** a catch is a second touch a fraction of a second later. A catch can also tap what is under the finger, so place it on something inert.
 - **Record with touch markers on** where the recorder offers it. The marker is the only record of where the injected finger really was.
+- **A cold start belongs inside the recording.** Start recording first, then force-stop and launch the app; a restart helper can return after the app has already drawn, and the launch is then missing from the clip.
+- **Use the path the stop call returns.** The finished recording may not be at the path the start call printed.
 - **Start recording before the action, let the screen settle, stop promptly.** Keep real time: turn off any trimming of still stretches when timing matters.
 
 ## Know your recorder
@@ -43,6 +45,7 @@ Choosing what to follow: a feature that is unique along the axis of movement and
 
 ## How much counts
 
+- **Measure a failure a second way.** A different script, a crop, or the element tree. One measurement method can be wrong in a way that looks exactly like a defect.
 - **Reproduce before reporting.** Replay every failure once more under the same conditions. A defect that does not come back is "seen once, not reproduced", not a finding.
 - **Report counts.** "5 of 5 cold starts" or "2 of 3 runs" says how real it is.
 - **A flash of one or two frames that repeats is a defect.** One that appeared once may be the recorder.

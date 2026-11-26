@@ -35,7 +35,7 @@ What sits behind the status bar on this screen?
 
 **Probe:** scroll each screen fully to the top and the bottom, and each horizontal row fully to both ends.
 
-**Passes when:** the first and last items are fully visible with their padding, and no floating button sits on top of another control at any scroll position. Compare element frames from the tree; overlap is exact there.
+**Passes when:** the first and last items are fully visible with their padding, every control can be scrolled clear of a floating button, and a floating button does not rest on a small control when the screen first opens. Compare element frames from the tree; overlap is exact there. If the design itself draws the overlap, report it as a design question, not a fail.
 
 ## E5. Short and empty content does not pretend to be long — POLISH
 

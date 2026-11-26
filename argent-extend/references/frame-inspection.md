@@ -32,9 +32,9 @@ scripts/sheet.py clip.mp4 2.5 6.2                       # top edge of a bottom s
 scripts/shift.py clip.mp4 2.5 6.2 0.0,0.05,1.0,0.20     # rough movement of a whole region between frames
 ```
 
-- `follow.py` is the dependable one. Give it something unique along the axis that stays on screen, and trust it while the error stays low. Run it on the touch marker too and compare.
+- `follow.py` is dependable on a feature that is unique along the axis and stays on screen; run it on the touch marker too and compare. It misleads in two cases. A region that contains something static (a label over a moving pill) follows the static part. A plain or repeating region can match somewhere else with a low error. Low error is necessary, not sufficient: check one offset against a crop of that frame. A region as wide as the frame cannot move at all.
 - Two parts move as one when they change on the same frames from first to last.
 - A scroll-linked element is right when its movement stays in proportion to the content's. One frame that moves far more than its neighbours, while the touch marker did not, is a snap.
 - Values are in clip pixels. Convert to points through the device's scale when reporting.
 
-Worked example, a swipe between two pages held at two stops: the touch marker read −198 and −414 px at the stops, a feature on the page read −184 and −400 px (following the finger, less the drag's start distance), and the tab indicator read 0 at both. The page passes and the indicator fails.
+Worked example, a swipe between two pages held at two stops. The touch marker read −198 and −414 px at the stops and a feature on the page read −184 and −400 px: the page follows the finger, less the distance a drag needs to start. The tab indicator was first measured with `follow.py` on the tab row and read 0 at both stops, which looked like a failure. It was wrong: the indicator slides beneath labels that stay put, so the match followed the label. Brightness under the two neighbouring tabs with `track.py`, and a crop at each stop, showed the indicator moving with the page. Measure a second way before believing a failure.

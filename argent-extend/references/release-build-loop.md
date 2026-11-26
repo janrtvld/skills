@@ -21,13 +21,13 @@ Make step 2 one command per platform, so it gets run. Script it once per project
 
 - **Build** in release configuration for the connected device. In an Expo or React Native project that is the release configuration of the iOS scheme and the release variant on Android. A local release build needs a signing setup the device accepts (a development profile that includes the device on iOS; any installable signing on Android).
 - **Install and launch** on the device by its id.
-- **Stamp the build.** Show or log the commit the build came from, and check it on the device before recording. Recording a stale build is the most common way to "verify" a fix that is not installed.
+- **Stamp the build.** Show or log the commit the build came from, and check it on the device before recording. Recording a stale build is the most common way to "verify" a fix that is not installed. When the project has no stamp, build from a clean tree and compare a hash of the built package with the installed one (on Android, the path from `pm path` and a SHA-256 of both files). Do not amend or rewrite commits after building; the hash you noted for the installed build no longer names it.
 
 Keep it fast:
 
 - When only JavaScript changed, the native build is incremental and the cost is mostly re-bundling. Do not clean between runs.
 - Stop the development server before a release build so the two do not compete, and run one native build at a time on a small machine.
-- Batch fixes: one rebuild per round of changes, not per change.
+- Batch fixes: one rebuild per round of changes, not per change. Set a build budget, and look at every frame around the fix on the first build for neighbouring defects before spending the next.
 
 ## Reporting
 

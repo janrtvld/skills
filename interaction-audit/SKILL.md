@@ -54,7 +54,7 @@ Three failure modes, worst first:
 8. **Remove what cannot be made right.** A header that stays put beats one that collapses badly. Say that it was removed.
 9. **Defects, not taste.** A finding names what the user sees and when. "The sheet could feel nicer" is not a finding. "The backdrop is fully dark four frames before the sheet starts to move" is.
 10. **Use the project's motion values and components.** Extend its tokens and primitives; never add a parallel sheet, press handler or timing scale during an audit.
-11. **Respect recorded decisions.** If the project documents a deliberate choice, note it and move on.
+11. **Respect recorded decisions and the design.** If the project documents a deliberate choice, or the design itself draws what a check would fail, report it as a question for the owner. Do not fix it and do not count it as a fail.
 
 ## Workflow
 
@@ -93,10 +93,10 @@ Replay every finding once more before reporting it. Then walk this, top to botto
 Does it lose or hide the user's work, or block a core action?
 ├── Yes → BLOCKER
 └── No
-    Will a typical user see it in the first five minutes, on any phone?
+    Will a typical user of either platform see it in the first five minutes?
     ├── Yes → BLOCKER
     └── No
-        Does it show on one platform, one device, one data state or one system setting?
+        Does it show only on one device model, one data state or one system setting?
         ├── Yes → SHOULD FIX
         └── No → POLISH
 ```
@@ -105,8 +105,10 @@ Does it lose or hide the user's work, or block a core action?
 
 Skip this phase when asked to audit only; report "nothing fixed".
 
+Before editing anything, reproduce the finding yourself and measure it a second, independent way (a different script, a crop, the element tree). A finding that does not reproduce, or that the second measurement contradicts, is reported as such and nothing is changed.
 
-Fix blockers, then should-fix items, in the shared part. Rebuild in release, replay the probe that failed, and replay it on the other platform.
+
+Fix blockers, then should-fix items, in the shared part. Rebuild in release, replay the probe that failed, and replay it on the other platform; if that platform is not available, say so in the first line of the report. Confirm with a comparison of the two builds that the fix changed nothing else on screen. A fix that the replay shows did not work is reverted in the same session, and the finding stays open with what was learned. Batch fixes per release build, and look at the first build for neighbours of the fix before spending the next.
 
 ## Flag on sight
 

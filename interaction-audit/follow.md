@@ -43,6 +43,8 @@ A tab indicator, a page dot, a progress edge that belongs to a swipe moves with 
 
 **Probe:** swipe between pages slowly and stop halfway.
 
+Measure the indicator itself, not the row it lives in: read the brightness under two neighbouring tabs at each stop, or look at a full-size crop of the row. Where an indicator slides beneath fixed labels, a template match on the row follows the label and reports no movement.
+
 **Passes when:** the indicator is halfway too. Tapping a tab animates the indicator in about 250ms.
 
 ## B4. Motion can be caught and reversed — SHOULD FIX

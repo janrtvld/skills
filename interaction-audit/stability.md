@@ -6,7 +6,7 @@ Record every probe in this lane. A shift lasts a few frames.
 
 ## C1. Arriving data fills space, it does not make space — BLOCKER on first screens
 
-**Probe:** record opening each data screen in three conditions: the app cold (after a force-quit), the screen cold (first visit since launch), and warm (a return visit). Each can fail alone. Compare the first frame that shows the screen with the settled frame.
+**Probe:** record opening each data screen in three conditions: the app cold (after a force-quit), the screen cold (first visit since launch), and warm (a return visit). Each can fail alone, so run each at least three times. On Android, returning to a tab can re-attach its screen and fail exactly like a first visit; do not treat a return as the safe case. Compare the first frame that shows the screen with the settled frame.
 
 **Passes when:** everything drawn in the first frame is in the same place in the last.
 
